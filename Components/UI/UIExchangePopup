@@ -1,0 +1,75 @@
+--@ BeginProperty
+--@ SyncDirection=None
+Entity CantSellUI = "nil"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=None
+Entity CantSellUIClose = "nil"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=None
+integer InventorySlotIndex = "0"
+--@ EndProperty
+
+--@ BeginMethod
+--@ MethodExecSpace=ClientOnly
+void OnBeginPlay()
+{
+self.Entity:SetEnable(false)
+
+    -- 닫기 버튼
+    local closeButton = self.Entity:GetChildByName("btn_close")
+    local closeFunc = function()
+    	self.Entity.Enable = false
+    end
+}
+--@ EndMethod
+
+--@ BeginMethod
+--@ MethodExecSpace=All
+void SetData(integer inventorySlotIndex,string itemId,integer itemCount)
+{
+---@type ItemInfo
+    local itemInfo = _Data.ItemTable[itemId]
+
+    if itemInfo == nil then
+    	log_error("[UISellPopup] (SetData) 아이템 Id 오류: " .. itemId)
+    	return
+    end
+
+    local imageEntity = self.Entity:GetChildByName("img_item")
+    local nameEntity = self.Entity:GetChildByName("txt_name")
+    local inputEntity = self.Entity:GetChildByName("input_count")
+    imageEntity.SpriteGUIRendererComponent.ImageRUID = itemInfo.IconRUID
+    nameEntity.TextComponent.Text = itemInfo.Name
+    inputEntity.TextInputComponent.Text = tostring(itemCount)
+	
+    self.InventorySlotIndex = inventorySlotIndex
+}
+--@ EndMethod
+
+--@ BeginEntityEventHandler
+--@ Scope=All
+--@ Target=entity:a0d9be8d-4f9a-49cb-84e2-b9412abeb321
+--@ EventName=ButtonClickEvent
+HandleButtonClickEvent
+{
+--------------- Native Event Sender Info ----------------
+    -- Sender: ButtonComponent
+    -- Space: Client
+---------------------------------------------------------
+
+    -- Parameters
+    local Entity = event.Entity
+---------------------------------------------------------
+
+        local inputEntity = self.Entity:GetChildByName("input_count")
+        local count = tonumber(inputEntity.TextInputComponent.Text)
+        _Shop:Exchange()
+    -- 항상 팝업 비활성화
+    self.Entity:SetEnable(false)
+
+}
+--@ EndEntityEventHandler

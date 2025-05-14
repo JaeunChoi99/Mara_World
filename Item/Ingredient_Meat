@@ -1,0 +1,25 @@
+--@ BeginProperty
+--@ SyncDirection=All
+string Name = """"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=All
+number MaxStackCount = "0"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=All
+number DayMaxCount = "0"
+--@ EndProperty
+
+--@ BeginMethod
+--@ MethodExecSpace=All
+void OnCreate()
+{
+--ItemTableData를 가져옴 
+self.Name = self.ItemTableData:GetItem("Name")
+self.MaxStackCount = tonumber(self.ItemTableData:GetItem("MaxStackCount"))
+log("재료가 생성되었습니다!")
+}
+--@ EndMethod

@@ -1,0 +1,98 @@
+--@ BeginProperty
+--@ SyncDirection=None
+Entity CantSellUI = "nil"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=None
+Entity CantSellUIClose = "nil"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=None
+integer InventorySlotIndex = "0"
+--@ EndProperty
+
+--@ BeginMethod
+--@ MethodExecSpace=ClientOnly
+void OnBeginPlay()
+{
+self.Entity:SetEnable(false)
+
+    -- 닫기 버튼
+    local closeButton = self.Entity:GetChildByName("btn_close")
+    local closeFunc = function()
+    	self.Entity.Enable = false
+    end
+
+    closeButton:ConnectEvent(ButtonClickEvent, closeFunc)
+
+-- CantSellUI 설정
+    self.CantSellUI = _EntityService:GetEntityByPath("/ui/DefaultGroup/CantSellUI")
+    self.CantSellUIClose = _EntityService:GetEntityByPath("/ui/DefaultGroup/CantSellUI/btn_close")
+
+    -- CantSellUI 닫기 버튼 설정
+    local cantSellUICloseFunc = function()
+        self.CantSellUI:SetEnable(false)
+    end
+
+    self.CantSellUIClose:ConnectEvent(ButtonClickEvent, cantSellUICloseFunc)
+}
+--@ EndMethod
+
+--@ BeginMethod
+--@ MethodExecSpace=All
+void SetData(integer inventorySlotIndex,string itemId,integer itemCount)
+{
+---@type ItemInfo
+    local itemInfo = _Data.ItemTable[itemId]
+
+    if itemInfo == nil then
+    	log_error("[UISellPopup] (SetData) 아이템 Id 오류: " .. itemId)
+    	return
+    end
+
+    local imageEntity = self.Entity:GetChildByName("img_item")
+    local nameEntity = self.Entity:GetChildByName("txt_name")
+    local inputEntity = self.Entity:GetChildByName("input_count")
+    imageEntity.SpriteGUIRendererComponent.ImageRUID = itemInfo.IconRUID
+    nameEntity.TextComponent.Text = itemInfo.Name
+    inputEntity.TextInputComponent.Text = tostring(itemCount)
+
+    self.InventorySlotIndex = inventorySlotIndex
+
+ -- 특정 이미지(예: Meat 아이템의 RUID)를 기준으로 팝업 활성화/비활성화
+    if itemInfo.IconRUID ~= "e6e6a9caeeb94c0eb0645c25b4c06ee5" then -- Meat의 IconRUID 예시가 아님
+        self.Entity:SetEnable(true)   -- 판매 팝업 활성화
+        self.CantSellUI:SetEnable(false) -- CantSellUI 비활성화
+    else
+        self.Entity:SetEnable(false)  -- 판매 팝업 비활성화
+        self.CantSellUI:SetEnable(true) -- CantSellUI 활성화
+    end
+}
+--@ EndMethod
+
+--@ BeginEntityEventHandler
+--@ Scope=All
+--@ Target=entity:a88be3db-e827-4b25-a826-546ba3955204
+--@ EventName=ButtonClickEvent
+HandleButtonClickEvent
+{
+--------------- Native Event Sender Info ----------------
+    -- Sender: ButtonComponent
+    -- Space: Client
+    ---------------------------------------------------------
+
+    -- Parameters
+    local Entity = event.Entity
+    ---------------------------------------------------------
+
+        local inputEntity = self.Entity:GetChildByName("input_count")
+        local count = tonumber(inputEntity.TextInputComponent.Text)
+        _Shop:Sell(self.InventorySlotIndex, count)
+    -- 항상 팝업 비활성화
+    self.Entity:SetEnable(false)
+
+}
+--@ EndEntityEventHandler
+

@@ -1,0 +1,191 @@
+--@ BeginProperty
+--@ SyncDirection=None
+integer SlotIndex = "0"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=None
+string ItemId = """"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=None
+integer ItemCount = "0"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=None
+Entity ShopObj = "nil"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=None
+boolean CanSell = "false"
+--@ EndProperty
+
+--@ BeginMethod
+--@ MethodExecSpace=All
+void SetData(integer slotIndex,string itemId,integer itemCount)
+{
+---@type ItemInfo
+    local itemInfo = _Data.ItemTable[itemId]
+
+    if itemInfo == nil then
+    	log_error("[UIInventoryItemSlot] (SetData) 아이템 Id 오류")
+    	return
+    end
+
+    local imageEntity = self.Entity:GetChildByName("img_slot")
+    local countEntity = imageEntity:GetChildByName("item_count")
+
+    imageEntity.SpriteGUIRendererComponent.ImageRUID = itemInfo.IconRUID
+    countEntity.TextComponent.Text = tostring(itemCount)
+    countEntity:SetEnable(true)
+
+    self.SlotIndex = slotIndex
+    self.ItemId = itemId
+	self.ItemCount = itemCount
+}
+--@ EndMethod
+
+--@ BeginMethod
+--@ MethodExecSpace=All
+void Clear()
+{
+local imageEntity = self.Entity:GetChildByName("img_slot")
+    imageEntity.SpriteGUIRendererComponent.ImageRUID = "129f02486c2baef49a41b31ce16171f6"
+    local countEntity = imageEntity:GetChildByName("item_count")
+    countEntity.TextComponent.Text = nil
+    countEntity:SetEnable(false)
+
+    self.ItemId = ""
+    self.ItemCount = 0
+}
+--@ EndMethod
+
+--@ BeginMethod
+--@ MethodExecSpace=All
+void SellPopupActive()
+{
+
+self.ShopObj = _EntityService:GetEntityByPath("/maps/StartMap/Shop")
+self.CanSell =  self.ShopObj.ShopEnter.CanSell
+
+if self.CanSell == true then
+-- 판매 팝업 활성화
+    local popup = _EntityService:GetEntityByPath("/ui/DefaultGroup/Shop/SellPopup")
+    popup.UISellPopup:SetData(self.SlotIndex, self.ItemId, self.ItemCount)
+end
+}
+--@ EndMethod
+
+--@ BeginMethod
+--@ MethodExecSpace=All
+void ExchangePopupActive()
+{
+     -- 인벤토리 슬롯에 아이템이 있는지 확인
+    if self.ItemId == "" or self.ItemId == nil then
+        log_error("[UIInventoryItemSlot] ExchangePopupActive: 아이템 ID가 유효하지 않습니다.")
+        return
+    end
+
+    -- 교환창의 슬롯을 가져옵니다.
+    local exchangeUI = _EntityService:GetEntityByPath("/ui/DefaultGroup/ExchangeUI")
+    if exchangeUI == nil then
+        log_error("[UIInventoryItemSlot] 교환 UI를 찾을 수 없습니다.")
+        return
+    end
+
+    -- CraftPanel 찾기
+    local craftPanel = exchangeUI:GetChildByName("CraftPanel")
+    if craftPanel == nil then
+        log_error("[UIInventoryItemSlot] CraftPanel을 찾을 수 없습니다.")
+        return
+    end
+
+    -- Craft_ScrollView 찾기
+    local craftScrollView = craftPanel:GetChildByName("Craft_ScrollView")
+    if craftScrollView == nil then
+        log_error("[UIInventoryItemSlot] Craft_ScrollView를 찾을 수 없습니다.")
+        return
+    end
+
+-- 아이템 종류에 따라 적절한 슬롯 찾기
+    local targetSlotName = ""
+    if self.ItemId == "Ingredient_Meat" then
+        targetSlotName = "Slot_Meat"
+    elseif self.ItemId == "Ingredient_BokChoy" then
+        targetSlotName = "Slot_BokChoy"
+    elseif self.ItemId == "Ingredient_Cabbage" then
+        targetSlotName = "Slot_Cabbage"
+    elseif self.ItemId == "Ingredient_MungBeanSprout" then
+        targetSlotName = "Slot_MungBeanSprout"
+    elseif self.ItemId == "Ingredient_Tofu" then
+        targetSlotName = "Slot_Tofu"
+    elseif self.ItemId == "Ingredient_Mushroom" then  -- 버섯 조건 추가
+        targetSlotName = "Slot_Mushroom"
+    end
+
+    if targetSlotName == "" then
+        log_error("[UIInventoryItemSlot] 적절한 슬롯을 찾을 수 없습니다.")
+        return
+    end
+
+    local exchangeSlot = craftScrollView:GetChildByName(targetSlotName)
+    if exchangeSlot == nil then
+        log_error("[UIInventoryItemSlot] 교환 슬롯을 찾을 수 없습니다.")
+        return
+    end
+
+    -- 교환 슬롯에 아이템 데이터를 설정
+    local exchangeSlotComponent = exchangeSlot.UICraftItemSlot
+    if exchangeSlotComponent == nil then
+        log_error("[UIInventoryItemSlot] 교환 슬롯 컴포넌트를 찾을 수 없습니다.")
+        return
+    end
+
+    -- 교환 슬롯에 이미 아이템이 있는지 확인
+    if exchangeSlotComponent.ItemId ~= "" and exchangeSlotComponent.ItemId ~= nil then
+        -- 기존 아이템을 인벤토리로 반환
+        _Shop:PutOut(exchangeSlotComponent.ItemId, exchangeSlotComponent.ItemCount)
+    end
+
+    -- 현재 아이템 정보 저장
+    local currentItemId = self.ItemId
+    local currentItemCount = math.min(self.ItemCount, 10)  -- 기본적으로 1개만 이동
+
+    -- 교환 슬롯에 아이템 설정
+    exchangeSlotComponent:SetData(currentItemId, currentItemCount)
+
+    -- 서버에 아이템 이동 요청
+    _Shop:PutIn(self.SlotIndex, currentItemCount)
+
+    -- 인벤토리 슬롯 초기화
+    self:Clear()
+}
+--@ EndMethod
+
+--@ BeginEntityEventHandler
+--@ Scope=All
+--@ Target=self
+--@ EventName=ButtonClickEvent
+HandleButtonClickEvent
+{
+-- 슬롯에 아이템이 있을 때만
+    if self.ItemId == "" then
+        return
+    end
+
+    -- 교환소 UI가 활성화되어 있을 때만 교환 기능 실행
+    local exchangeUI = _EntityService:GetEntityByPath("/ui/DefaultGroup/ExchangeUI")
+    if exchangeUI ~= nil and exchangeUI.Enable then
+        self:ExchangePopupActive()
+        return
+    end
+
+    -- 상점 UI가 활성화되어 있을 때만 판매 기능 실행
+    self:SellPopupActive()
+    
+
+}
+--@ EndEntityEventHandler

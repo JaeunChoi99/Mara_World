@@ -1,0 +1,302 @@
+--@ BeginProperty
+--@ SyncDirection=All
+integer GatherCount = "0"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=All
+integer MaxGatherLimit = "3000"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=All
+integer LastGatherTime = "0"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=All
+Component PlayerComponent = ":PlayerComponent"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=All
+Entity GatherLimitUI = "nil"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=All
+boolean Triggered = "false"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=All
+number Timer = "0"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=All
+boolean IsTimerActive = "false"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=All
+integer DailyCabbageCount = "0"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=All
+integer DailyBokchoyCount = "0"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=All
+integer DailyMungBeanSprout = "0"
+--@ EndProperty
+
+--@ BeginProperty
+--@ SyncDirection=None
+Entity EffectObject = "nil"
+--@ EndProperty
+
+--@ BeginMethod
+--@ MethodExecSpace=ServerOnly
+void OnBeginPlay()
+{
+    -- 이펙트 오브젝트 참조 초기화
+    self.EffectObject = _EntityService:GetEntityByPath("/maps/GatheringMap/GatheringEffect")
+    if self.EffectObject == nil then
+        print("[ERROR] 이펙트 오브젝트를 찾을 수 없습니다.")
+    end
+
+    -- 데이터 로딩 코드 유지
+    local userDataStorage = _DataStorageService:GetUserDataStorage("GatheringData")
+    if userDataStorage == nil then
+        print("[ERROR] 데이터 스토리지를 가져올 수 없습니다.")
+        return
+    end
+
+    local errorCode, loadData = userDataStorage:GetAndWait("GatheringData")
+    if errorCode ~= 0 then
+        print("[ERROR] 데이터 로딩 실패: " .. tostring(errorCode))
+        return
+    end
+
+    if loadData == nil then
+        self.GatherCount = 0
+        self.LastGatherTime = os.time()
+        self.DailyBokchoyCount = 0
+        self.DailyCabbageCount = 0
+        self.DailyMungBeanSprout = 0
+    else
+        local gatherData = _HttpService:JSONDecode(loadData)
+        self.GatherCount = gatherData.GatherCount or 0
+        self.LastGatherTime = gatherData.LastGatherTime or os.time()
+        self.DailyBokchoyCount = gatherData.DailyBokchoyCount or 0
+        self.DailyCabbageCount = gatherData.DailyCabbageCount or 0
+        self.DailyMungBeanSprout = gatherData.DailyMungBeanSprout or 0
+    end
+}
+--@ EndMethod
+
+--@ BeginMethod
+--@ MethodExecSpace=ServerOnly
+boolean CheckGatherLimit()
+{
+    local currentTime = os.time()
+    if currentTime - self.LastGatherTime >= 86400 then
+        self.GatherCount = 0
+        self.LastGatherTime = currentTime
+        self.DailyBokchoyCount = 0
+        self.DailyCabbageCount = 0
+        self.DailyMungBeanSprout = 0
+        print("[INFO] 하루가 지나 채집 횟수를 초기화합니다.")
+    end
+
+    if self.GatherCount >= self.MaxGatherLimit then
+        print("[ERROR] 하루 최대 채집 횟수를 초과했습니다.")
+        return false
+    else
+        return true
+    end
+}
+--@ EndMethod
+
+--@ BeginMethod
+--@ MethodExecSpace=ServerOnly
+void OnEndPlay()
+{
+    local userDataStorage = _DataStorageService:GetUserDataStorage("GatheringData")
+    if userDataStorage == nil then
+        print("[ERROR] 데이터 스토리지를 가져올 수 없습니다.")
+        return
+    end
+
+    local gatherData = {
+        GatherCount = self.GatherCount,
+        LastGatherTime = self.LastGatherTime,
+        DailyBokchoyCount = self.DailyBokchoyCount,
+        DailyCabbageCount = self.DailyCabbageCount,
+        DailyMungBeanSprout = self.DailyMungBeanSprout
+    }
+
+    local jsonData = _HttpService:JSONEncode(gatherData)
+    userDataStorage:SetAsync("GatheringData", jsonData, function()
+        print("[INFO] 채집 데이터 저장 완료")
+    end)
+}
+--@ EndMethod
+
+--@ BeginMethod
+--@ MethodExecSpace=ClientOnly
+void OnUpdate(number delta)
+{
+if self.Triggered == true then
+self:GatherLimitUISet()
+else
+	self:EndGatherLimitUISet()
+end
+}
+--@ EndMethod
+
+--@ BeginMethod
+--@ MethodExecSpace=All
+void GatherLimitUISet()
+{
+self.GatherLimitUI = _EntityService : GetEntityByPath("/ui/DefaultGroup/GatherLimitUI") 
+
+if self.GatherCount >= self.MaxGatherLimit then
+	self.GatherLimitUI:SetEnable(true)
+	log("아쫌")
+else
+	self.GatherLimitUI:SetEnable(false)
+	end
+}
+--@ EndMethod
+
+--@ BeginMethod
+--@ MethodExecSpace=All
+void EndGatherLimitUISet()
+{
+self.GatherLimitUI = _EntityService : GetEntityByPath("/ui/DefaultGroup/GatherLimitUI")
+self.GatherLimitUI:SetEnable(false)
+}
+--@ EndMethod
+
+--@ BeginEntityEventHandler
+--@ Scope=All
+--@ Target=self
+--@ EventName=TriggerEnterEvent
+HandleTriggerEnterEvent
+{
+     -- 0.5초 후 채집 가능하도록 타이머 설정
+    _TimerService:SetTimerOnce(function()
+        self.Triggered = true
+        local TriggerBodyEntity = event.TriggerBodyEntity
+
+        if not self:CheckGatherLimit() then
+            print("[ERROR] 채집 제한에 도달하여 더 이상 채집할 수 없습니다.")
+            return
+        end
+
+        self.GatherCount = self.GatherCount + 1
+        print("[INFO] 현재 채집 횟수: " .. tostring(self.GatherCount))
+
+        local inventory = TriggerBodyEntity.InventoryComponent
+        if inventory == nil then 
+            print("[ERROR] 충돌한 엔티티에 인벤토리가 없습니다.")
+            return 
+        end
+
+        local SimpleInventory = TriggerBodyEntity.SimpleInventory
+        if SimpleInventory == nil then
+            print("[ERROR] 충돌한 엔티티에 SimpleInventory 컴포넌트가 없습니다.")
+            return
+        end
+
+        -- 랜덤으로 채집할 아이템 선택
+        local itemNames = {
+            {"Cabbage", "Ingredient_Cabbage"},
+            {"BokChoy", "Ingredient_BokChoy"},
+            {"MungBeanSprout", "Ingredient_MungBeanSprout"}
+        }
+        math.randomseed(os.time())
+        local index = math.random(1, 3)
+        local getItemName = itemNames[index]
+        local itemId = getItemName[2]
+
+        -- 아이템 인벤토리에 추가
+        local remain = SimpleInventory:AddItem(itemId, 1)
+
+        -- 획득한 아이템 카운트 갱신
+        if getItemName[1] == "Cabbage" then
+            self.DailyCabbageCount = self.DailyCabbageCount + 1
+        elseif getItemName[1] == "BokChoy" then
+            self.DailyBokchoyCount = self.DailyBokchoyCount + 1
+        elseif getItemName[1] == "MungBeanSprout" then
+            self.DailyMungBeanSprout = self.DailyMungBeanSprout + 1
+        end
+
+        -- 이펙트 오브젝트 활성화
+        if self.EffectObject then
+            self.EffectObject:SetEnable(true)
+            _TimerService:SetTimerOnce(function()
+                self.EffectObject:SetEnable(false)
+                self.Entity:SetEnable(false)
+
+                -- 일정 시간 후에 채집 오브젝트를 재활성화
+                _TimerService:SetTimerOnce(function()
+                    self.Entity:SetEnable(true)
+                end, 2) -- 2초 후 재활성화
+            end, 0.5) -- 0.5초 후 이펙트 비활성화
+        else
+            self.Entity:SetEnable(false)
+            _TimerService:SetTimerOnce(function()
+                self.Entity:SetEnable(true)
+            end, 2) -- 2초 후 재활성화
+        end
+
+        -- 아이콘 이펙트 표시
+        local itemIcons = {
+            ["Ingredient_Cabbage"] = "93e3b19505904ef995c2077c927014d8", -- 배추
+            ["Ingredient_BokChoy"] = "9c82cb8a1a274452ba76e017ace3466c", -- 청경채
+            ["Ingredient_MungBeanSprout"] = "fdbdb29b46a0463ea9f75b90db3124b5" -- 숙주
+        }
+
+        local itemIconRUID = itemIcons[itemId]
+        if itemIconRUID then
+            local ingredientEffect = _EntityService:GetEntityByPath("/maps/GatheringMap/IngredientEffect")
+            if ingredientEffect then
+                ingredientEffect.SpriteParticleComponent.SpriteRUID = itemIconRUID
+                ingredientEffect:SetEnable(true)
+                
+                -- 일정 시간 후 아이콘 이펙트 비활성화
+                _TimerService:SetTimerOnce(function()
+                    ingredientEffect:SetEnable(false)
+                end, 1.5)
+            else
+                print("[ERROR] IngredientEffect 오브젝트를 찾을 수 없습니다.")
+            end
+        else
+            print("[ERROR] 아이템에 맞는 RUID가 설정되지 않았습니다: " .. tostring(itemId))
+        end
+    end, 0.5) -- 0.5초 후 채집 가능
+}
+--@ EndEntityEventHandler
+
+--@ BeginEntityEventHandler
+--@ Scope=All
+--@ Target=self
+--@ EventName=TriggerLeaveEvent
+HandleTriggerLeaveEvent
+{
+--------------- Native Event Sender Info ----------------
+-- Sender: TriggerComponent
+-- Space: Server, Client
+---------------------------------------------------------
+
+-- Parameters
+-- local TriggerBodyEntity = event.TriggerBodyEntity
+---------------------------------------------------------
+self.Triggered = false
+}
+--@ EndEntityEventHandler
